@@ -1,8 +1,8 @@
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {promises as fs} from 'node:fs';
-import ffmpeg from 'ffmpeg-static';
+import {promises as fs, existsSync} from 'node:fs';
+import {ffmpegPath,ffmpegProblem} from './media-tools.mjs';
 
 export function youtubeUrl(value) {
   try {
@@ -36,7 +36,11 @@ export function choicesFromInfo(info,url) {
   return result;
 }
 function executable() {
-  return process.versions.electron&&process.resourcesPath&&!process.defaultApp?path.join(process.resourcesPath,'tools','yt-dlp.exe'):fileURLToPath(new URL('../vendor/yt-dlp.exe',import.meta.url));
+  const name=process.platform==='win32'?'yt-dlp.exe':'yt-dlp';
+  const bundled=process.versions.electron&&process.resourcesPath&&!process.defaultApp?path.join(process.resourcesPath,'tools',name):fileURLToPath(new URL('../vendor/'+name,import.meta.url));
+  // Linux: fall back to a system-wide yt-dlp (apt/pipx) when none is bundled.
+  if(process.platform!=='win32'&&!existsSync(bundled))return 'yt-dlp';
+  return bundled;
 }
 export function youtubeError(raw) {
   const message=String(raw);
@@ -85,7 +89,9 @@ export async function downloadYoutube({url,formatKey,directory,signal,onProgress
   if(!choice)throw new Error('This YouTube format is no longer available. Refresh the video menu.');
   onMetadata?.(choice);
   const audio=choice.youtubeFormat.startsWith('audio:');
-  const args=['--newline','--progress','--progress-delta','0.5','--progress-template','download:ADPROGRESS:%(progress)j','--ffmpeg-location',ffmpeg.replace('app.asar','app.asar.unpacked'),'-f',audio?choice.youtubeFormat.slice(6):choice.youtubeFormat,'-o',path.join(directory,'media.%(ext)s')];
+  const mediaTool=ffmpegProblem();
+  if(mediaTool)throw new Error(mediaTool);
+  const args=['--newline','--progress','--progress-delta','0.5','--progress-template','download:ADPROGRESS:%(progress)j','--ffmpeg-location',ffmpegPath(),'-f',audio?choice.youtubeFormat.slice(6):choice.youtubeFormat,'-o',path.join(directory,'media.%(ext)s')];
   if(speedLimitKbps)args.push('--limit-rate',String(speedLimitKbps*1024));
   args.push(...(audio?['--extract-audio','--audio-format','mp3']:['--merge-output-format','mp4']),youtubeUrl(url));
   const finished=new Map();let completedBytes=0;

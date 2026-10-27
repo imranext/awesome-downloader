@@ -6,6 +6,10 @@ if (process.argv.includes('--native-host')) {
 } else {
   const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, Tray, Menu, nativeImage, Notification } = require('electron');
   app.setName('Awesome Downloader');
+  // Electron 44 aborts with "GPU process isn't usable" on some Wayland/XWayland
+  // sessions, which kills the app before a window appears. The interface is plain
+  // HTML, so software rendering costs nothing here and removes the failure mode.
+  if (process.platform !== 'win32') app.disableHardwareAcceleration();
   // AppData writes can be virtualized when launched by an MSIX development app.
   // Chrome launched normally must see the same connector, bridge, and history.
   const sharedDataDirectory = path.join(app.getPath('home'), '.awesome-downloader');
@@ -58,11 +62,11 @@ if (process.argv.includes('--native-host')) {
           filter: require('./resource-copy.cjs').copyIfChanged
         });
         const quoteBatch = value => String(value).replaceAll('%', '%%');
-        await fs.writeFile(path.join(integrationRoot, 'integration', 'native-host.cmd'),
+        if (process.platform === 'win32') await fs.writeFile(path.join(integrationRoot, 'integration', 'native-host.cmd'),
           `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${quoteBatch(app.getPath('exe'))}" "%~dp0native-host.cjs"\r\n`);
       }
       // Use the bundled runtime even in development; browsers need not inherit Node's PATH.
-      if (!app.isPackaged) {
+      if (!app.isPackaged && process.platform === 'win32') {
         const fs = require('node:fs/promises');
         await fs.writeFile(path.join(integrationRoot, 'integration', 'native-host.cmd'), `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${app.getPath('exe').replaceAll('%', '%%')}" "%~dp0native-host.cjs"\r\n`);
       }
@@ -104,6 +108,8 @@ if (process.argv.includes('--native-host')) {
             const result = await shell.openPath(d.path); if (result) throw new Error(result);
           } else if (action === 'openWith') {
             if (d.status !== 'complete' || !d.path) throw new Error('This download has not finished.');
+            // Linux has no system "Open with" dialog; use the desktop's default handler.
+            if (process.platform !== 'win32') { const result = await shell.openPath(d.path); if (result) throw new Error(result); return; }
             await new Promise((resolve,reject)=>require('node:child_process').execFile(path.join(process.env.SystemRoot||'C:\\Windows','System32','OpenWith.exe'),[d.path],{windowsHide:true},error=>error?reject(error):resolve()));
           } else if (action === 'reveal') { if (d.path) shell.showItemInFolder(d.path); else await shell.openPath(d.directory); }
           else return engine.action(id, action);
@@ -163,7 +169,7 @@ if (process.argv.includes('--native-host')) {
         { label: 'File', submenu: [ { label: 'Download properties…', click: command('details') }, { label: 'Remove selected', accelerator: 'Delete', click: command('remove') }, { label: 'Remove completed downloads', click: command('removeCompleted') } ] },
         { label: 'Downloads', submenu: [ { label: 'Pause all', click: command('pauseAll') }, { label: 'Stop all', click: command('pauseAll') }, { type: 'separator' }, { label: 'Delete all completed', click: command('removeCompleted') }, { type: 'separator' }, { label: 'Find', accelerator: 'CmdOrCtrl+F', click: command('find') }, { type: 'separator' }, { label: 'Scheduler…', click: command('scheduler') }, { label: 'Start queue', click: command('resumeAll') }, { label: 'Stop queue', click: command('pauseAll') }, { label: 'Speed limiter…', click: command('settings') }, { type: 'separator' }, { label: 'Options…', click: command('settings') } ] },
         { label: 'View', submenu: [ { label: 'All downloads', click: command('all') }, { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' } ] },
-        { label: 'Help', submenu: [ { label: 'Browser integration…', click: command('integration') }, { label: 'About Awesome Downloader', click: () => dialog.showMessageBox(window, { title: 'About Awesome Downloader', message: 'Awesome Downloader 0.1.0', detail: 'Windows download manager with browser integration. Original implementation inspired by IDM. Full IDM feature parity is in development.' }) } ] }
+        { label: 'Help', submenu: [ { label: 'Browser integration…', click: command('integration') }, { label: 'About Awesome Downloader', click: () => dialog.showMessageBox(window, { title: 'About Awesome Downloader', message: 'Awesome Downloader 0.1.0', detail: `${process.platform === 'win32' ? 'Windows' : 'Cross-platform'} download manager with browser integration. Original implementation inspired by IDM. Full IDM feature parity is in development.` }) } ] }
       ]));
       engine.on('change', () => {
         const data=snapshot();
@@ -186,6 +192,7 @@ if (process.argv.includes('--native-host')) {
       tray.setToolTip('Awesome Downloader');
       tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Show downloads', click: () => window.show() }, { label: 'Quit', click: () => app.quit() }]));
       tray.on('double-click', () => window.show());
+      tray.on('click', () => window.show());
       window.on('close', event => { if (!quitting) { event.preventDefault(); window.hide(); } });
       app.on('activate', () => window.show());
     }).catch(error => { dialog.showErrorBox('Awesome Downloader could not start', error.stack || error.message); quitting = true; app.quit(); });

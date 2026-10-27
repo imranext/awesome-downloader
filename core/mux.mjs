@@ -1,5 +1,4 @@
-import ffmpegPath from 'ffmpeg-static';
-import { spawn } from 'node:child_process';
+import { spawnFfmpeg } from './media-tools.mjs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
@@ -15,9 +14,8 @@ export async function muxTracks(directory, videoCount, count, signal) {
     } finally { await output.close(); }
   }
   const output = path.join(directory,'combined.mp4');
-  const executable = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
   await new Promise((resolve,reject) => {
-    const child = spawn(executable, ['-nostdin','-v','error','-y','-protocol_whitelist','file,pipe','-i',path.join(directory,'video.track'),'-protocol_whitelist','file,pipe','-i',path.join(directory,'audio.track'),'-map','0:v:0','-map','1:a:0','-c','copy','-movflags','+faststart',output], {windowsHide:true,signal,stdio:['ignore','ignore','pipe']});
+    const child = spawnFfmpeg(['-nostdin','-v','error','-y','-protocol_whitelist','file,pipe','-i',path.join(directory,'video.track'),'-protocol_whitelist','file,pipe','-i',path.join(directory,'audio.track'),'-map','0:v:0','-map','1:a:0','-c','copy','-movflags','+faststart',output], {windowsHide:true,signal,stdio:['ignore','ignore','pipe']});
     let error=''; child.stderr.on('data', chunk => { error=(error+chunk).slice(-4096); });
     child.on('error',reject); child.on('close',code => code===0?resolve():reject(new Error(`Could not combine video and audio: ${error || 'media process exited '+code}`)));
   });
@@ -33,7 +31,7 @@ export async function convertMedia(directory, files, format, signal) {
   await new Promise((resolve,reject)=>{
     const args=['-nostdin','-v','error','-y','-protocol_whitelist','file,pipe','-i',source];
     args.push(...(format==='mp3'?['-map','0:a:0','-vn','-c:a','libmp3lame','-q:a','2']:['-map','0:v:0','-map','0:a:0?','-c','copy','-movflags','+faststart']),output);
-    const child=spawn(ffmpegPath.replace('app.asar','app.asar.unpacked'),args,{windowsHide:true,signal,stdio:['ignore','ignore','pipe']});
+    const child=spawnFfmpeg(args,{windowsHide:true,signal,stdio:['ignore','ignore','pipe']});
     let error='';child.stderr.on('data',chunk=>{error=(error+chunk).slice(-4096);});
     child.on('error',reject);child.on('close',code=>code===0?resolve():reject(new Error(`Could not create ${format.toUpperCase()}: ${error || 'media process exited '+code}`)));
   });

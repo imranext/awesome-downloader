@@ -1,19 +1,21 @@
 {
   "name": "awesome-downloader",
   "version": "0.1.0",
-  "description": "A Windows download manager with segmented transfers and browser video capture",
+  "description": "A download manager with segmented transfers and browser video capture",
   "main": "desktop/main.cjs",
   "private": true,
   "repository": { "type": "git", "url": "https://github.com/Ahmadkhattak1/awesome-downloader.git" },
   "bugs": { "url": "https://github.com/Ahmadkhattak1/awesome-downloader/issues" },
   "author": "Awesome Downloader contributors",
+  "desktopName": "awesome-downloader.desktop",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.mjs integration/*.test.cjs extension/*.test.cjs",
     "package": "electron-builder --win dir",
     "dist": "electron-builder --win nsis --x64 --publish never",
-    "dist:portable": "electron-builder --win portable --x64 --publish never"
+    "dist:portable": "electron-builder --win portable --x64 --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb --x64 --publish never"
   },
   "devDependencies": {
     "electron": "44.9.0",
@@ -39,8 +41,6 @@
     ],
     "asar": true,
     "extraResources": [
-      { "from": "node_modules/ffmpeg-static/ffmpeg.exe.LICENSE", "to": "licenses/FFmpeg-LICENSE.txt" },
-      { "from": "node_modules/ffmpeg-static/ffmpeg.exe.README", "to": "licenses/FFmpeg-BUILD.txt" },
       { "from": "node_modules/ffmpeg-static/LICENSE", "to": "licenses/ffmpeg-static-LICENSE.txt" },
       { "from": "node_modules/googlevideo/LICENSE", "to": "licenses/googlevideo-LICENSE.txt" },
       {
@@ -48,6 +48,7 @@
         "to": "tools",
         "filter": [
           "yt-dlp.exe",
+          "yt-dlp",
           "*.txt"
         ]
       },
@@ -64,16 +65,39 @@
         "to": "browser/integration",
         "filter": [
           "native-host.exe",
-          "native-host.cjs",
           "NativeHostLauncher.cs",
-          "README.md",
-          "register-native-host.ps1"
+          "register-native-host.ps1",
+          "native-host.cjs",
+          "README.md"
         ]
       }
     ],
     "asarUnpack": [
+      "node_modules/ffmpeg-static/ffmpeg",
       "node_modules/ffmpeg-static/ffmpeg.exe"
     ],
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] }],
+      "category": "Network",
+      "icon": "assets/app-icon.png",
+      "synopsis": "Download manager with segmented transfers and browser video capture",
+      "maintainer": "Awesome Downloader contributors <noreply@example.com>",
+      "syncDesktopName": true,
+      "desktop": { "entry": { "StartupWMClass": "awesome-downloader" } }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0t64 | libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0t64 | libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ]
+    },
     "electronDist": "node_modules/electron/dist",
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
